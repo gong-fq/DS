@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
+    /* 之前的CSS样式保持不变... */
     * {
       margin: 0;
       padding: 0;
@@ -480,6 +481,10 @@
       background: var(--success);
     }
 
+    .ai-control-btn.active {
+      background: var(--accent);
+    }
+
     .input-area {
       display: flex;
       gap: 8px;
@@ -571,6 +576,19 @@
       vertical-align: middle;
     }
 
+    /* TTS状态指示器 */
+    .tts-status {
+      margin-top: 10px;
+      font-size: 0.85rem;
+      color: var(--text-light);
+      display: none;
+    }
+
+    .tts-status.active {
+      display: block;
+      color: var(--accent);
+    }
+
     /* 响应式设计 */
     @media (max-width: 768px) {
       .logo { font-size: 2.2rem; }
@@ -639,7 +657,6 @@
     <header>
       <h1 class="logo">DeepSeek AI Academy</h1>
       <p class="subtitle">Master Large Language Models · 精通大语言模型</p>
-      <p>天津财经大学统计学院教授  龚凤乾</p>
       <span class="tagline">从理论到实践的系统化学习</span>
     </header>
 
@@ -851,6 +868,7 @@ Model Architecture:
           <button class="ai-control-btn" onclick="toggleVoice()" id="voiceBtn" title="语音输入">🎤</button>
           <button class="ai-control-btn" onclick="clearChat()" title="清空对话">🗑️</button>
           <button class="ai-control-btn" onclick="speakResponse()" id="ttsBtn" title="语音朗读">🔊</button>
+          <button class="ai-control-btn" onclick="testFunctionConnection()" title="测试连接">🔧</button>
         </div>
       </div>
       
@@ -867,6 +885,10 @@ Model Architecture:
       <div class="ai-response" id="aiResponse">
         你好！我是DeepSeek学习助手，可以解答关于大语言模型的各种问题。有什么可以帮助你的吗？
       </div>
+      
+      <div class="tts-status" id="ttsStatus">
+        <!-- TTS状态将在这里显示 -->
+      </div>
     </div>
   </div>
 
@@ -879,6 +901,8 @@ Model Architecture:
     let speechRecognition = null;
     let currentResponse = '';
     let isAILoading = false;
+    let speechSynthesis = window.speechSynthesis;
+    let currentUtterance = null;
 
     // ================ 语言管理 ================
     function setLanguage(lang) {
@@ -887,15 +911,12 @@ Model Architecture:
         btn.classList.toggle('active', btn.dataset.lang === lang);
       });
       
-      // 更新UI文本（简化版）
       updateUIText(lang);
       
-      // 更新AI助手语言
       if (speechRecognition) {
         speechRecognition.lang = lang === 'zh' ? 'zh-CN' : 'en-US';
       }
       
-      // 更新输入框提示
       const input = document.getElementById('aiInput');
       input.placeholder = lang === 'zh' 
         ? '输入关于DeepSeek的问题...' 
@@ -903,7 +924,6 @@ Model Architecture:
     }
 
     function updateUIText(lang) {
-      // 这里可以添加更多的UI文本更新
       const aiResponse = document.getElementById('aiResponse');
       if (!aiResponse.classList.contains('loading') && !aiResponse.classList.contains('error')) {
         aiResponse.textContent = lang === 'zh'
@@ -968,7 +988,7 @@ Model Architecture:
       }
     }
 
-    // 发送消息到AI（优化版）
+    // 发送消息到AI
     async function sendToAI() {
       if (isAILoading) return;
       
@@ -982,6 +1002,9 @@ Model Architecture:
 
       const responseDiv = document.getElementById('aiResponse');
       const sendBtn = document.getElementById('sendBtn');
+      
+      // 停止正在进行的朗读
+      stopSpeaking();
       
       // 设置加载状态
       isAILoading = true;
@@ -1001,73 +1024,36 @@ Model Architecture:
         const hasChinese = /[\u4e00-\u9fa5]/.test(message);
         const messageLanguage = hasChinese ? 'zh' : 'en';
         
-        // 使用优化的系统提示
-        const systemPrompt = messageLanguage === 'zh'
-          ? `你是DeepSeek大语言模型的学习助手，专门解答关于DeepSeek和LLM的问题。
-            要求：
-            1. 用中文回答所有问题
-            2. 回答要准确、实用、简洁
-            3. 如果问题复杂，分点说明
-            4. 适当使用代码示例
-            5. 保持回答友好有帮助
-            
-            注意：用户正在学习DeepSeek课程，请提供适合初学者的解释。`
-          : `You are a DeepSeek learning assistant specializing in DeepSeek and LLM topics.
-            Requirements:
-            1. Answer all questions in English
-            2. Be accurate, practical, and concise
-            3. Break down complex answers
-            4. Use code examples when appropriate
-            5. Keep responses friendly and helpful
-            
-            Note: The user is learning about DeepSeek, provide beginner-friendly explanations.`;
-        
-        // 快速响应机制：先尝试快速响应
-        const quickResponses = {
-          zh: {
-            '什么是大语言模型': '大语言模型是基于深度学习的AI系统，通过大量文本训练，能够理解和生成自然语言。DeepSeek是其中的优秀代表！',
-            'deepseek特点': 'DeepSeek具有强大的理解能力、多语言支持、优秀的代码生成能力和高效的推理性能。',
-            'token': 'Token是文本处理的最小单元，可以是字符、子词或单词。模型将文本分解为Token进行处理。',
-            'transformer': 'Transformer是一种基于注意力机制的神经网络架构，是大语言模型的基础。',
-            '注意力机制': '注意力机制让模型能够关注输入中的重要部分，像人一样"注意"关键信息。'
-          },
-          en: {
-            'what is llm': 'Large Language Models are AI systems based on deep learning, trained on massive text data to understand and generate natural language.',
-            'deepseek features': 'DeepSeek has strong understanding capabilities, multilingual support, excellent code generation, and efficient reasoning.',
-            'what is token': 'A token is the smallest unit of text processing, which can be a character, subword, or word.',
-            'transformer architecture': 'Transformer is an attention-based neural network architecture, the foundation of modern LLMs.',
-            'attention mechanism': 'Attention mechanism allows models to focus on important parts of the input.'
-          }
-        };
-        
-        // 检查是否有快速响应
-        const quickResponseKey = Object.keys(quickResponses[messageLanguage]).find(key => 
-          message.toLowerCase().includes(key.toLowerCase())
-        );
-        
-        if (quickResponseKey) {
-          // 快速响应
-          setTimeout(() => {
-            currentResponse = quickResponses[messageLanguage][quickResponseKey];
-            showAIResponse(currentResponse, false);
-            isAILoading = false;
-            resetUIState();
-          }, 500);
-          return;
-        }
-        
         // 实际API调用
         const response = await fetch('/.netlify/functions/deepseek-assistant', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
           body: JSON.stringify({
             message: message,
             language: messageLanguage,
-            systemPrompt: systemPrompt
+            timestamp: new Date().toISOString()
           })
         });
         
+        console.log('API响应状态:', response.status);
+        
+        // 检查响应类型
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          const text = await response.text();
+          console.error('非JSON响应:', text.substring(0, 200));
+          throw new Error('服务器返回了非JSON响应');
+        }
+        
         const data = await response.json();
+        
+        if (data.error) {
+          console.error('AI服务错误:', data);
+          throw new Error(data.reply || 'AI服务返回错误');
+        }
         
         if (data.reply) {
           currentResponse = data.reply;
@@ -1078,9 +1064,22 @@ Model Architecture:
         
       } catch (error) {
         console.error('AI请求失败:', error);
-        const errorMessage = currentLanguage === 'zh'
-          ? '抱歉，暂时无法获取回答。请检查网络连接后重试。'
-          : 'Sorry, unable to get a response. Please check your connection and try again.';
+        
+        let errorMessage;
+        if (error.message.includes('Failed to fetch')) {
+          errorMessage = currentLanguage === 'zh'
+            ? '网络连接失败。请检查网络连接。'
+            : 'Network connection failed. Please check your connection.';
+        } else if (error.message.includes('404')) {
+          errorMessage = currentLanguage === 'zh'
+            ? 'API端点不存在 (404)。请确保已正确部署Netlify Functions。'
+            : 'API endpoint not found (404). Please ensure Netlify Functions are properly deployed.';
+        } else {
+          errorMessage = currentLanguage === 'zh'
+            ? `请求失败：${error.message}`
+            : `Request failed: ${error.message}`;
+        }
+        
         showAIResponse(errorMessage, true);
       } finally {
         isAILoading = false;
@@ -1093,8 +1092,11 @@ Model Architecture:
       responseDiv.innerHTML = response;
       responseDiv.className = `ai-response ${isError ? 'error' : 'success'}`;
       
+      // 更新当前响应文本（用于TTS）
+      currentResponse = response;
+      
       // 显示TTS按钮
-      document.getElementById('ttsBtn').style.display = 'block';
+      updateTTSButton();
     }
 
     function resetUIState() {
@@ -1154,41 +1156,223 @@ Model Architecture:
       document.getElementById('voiceBtn').textContent = '🎤';
     }
 
-    // ================ TTS功能 ================
-    function speakResponse() {
-      if (!currentResponse || isSpeaking) return;
+    // ================ 改进的TTS功能 ================
+    function cleanTextForTTS(text) {
+      if (!text) return '';
       
-      if ('speechSynthesis' in window) {
-        const utterance = new SpeechSynthesisUtterance(currentResponse);
-        utterance.lang = currentLanguage === 'zh' ? 'zh-CN' : 'en-US';
-        utterance.rate = 0.9;
-        
-        utterance.onstart = () => {
-          isSpeaking = true;
-          document.getElementById('ttsBtn').classList.add('speaking');
-          document.getElementById('ttsBtn').textContent = '⏹️';
-        };
-        
-        utterance.onend = () => {
-          isSpeaking = false;
-          document.getElementById('ttsBtn').classList.remove('speaking');
-          document.getElementById('ttsBtn').textContent = '🔊';
-        };
-        
-        window.speechSynthesis.speak(utterance);
+      // 移除所有HTML标签
+      text = text.replace(/<[^>]*>/g, ' ');
+      
+      // 移除Markdown标记
+      text = text.replace(/[#*_`~\[\](){}|\\\-=+>]/g, ' ');
+      
+      // 移除特殊符号和表情符号
+      text = text.replace(/[\u2000-\u206F\u2E00-\u2E7F\u3000-\u303F\uFE00-\uFE0F\uFE20-\uFE2F\uE000-\uF8FF\u{1F000}-\u{1F9FF}]/gu, ' ');
+      
+      // 移除代码块标记
+      text = text.replace(/```[\s\S]*?```/g, ' ');
+      
+      // 移除URL
+      text = text.replace(/https?:\/\/[^\s]+/g, ' ');
+      
+      // 移除多余的空格和换行
+      text = text.replace(/\s+/g, ' ').trim();
+      
+      return text;
+    }
+
+    function speakResponse() {
+      // 如果正在朗读，点击停止
+      if (isSpeaking) {
+        stopSpeaking();
+        return;
+      }
+      
+      // 如果没有响应内容
+      if (!currentResponse || currentResponse.trim().length === 0) {
+        const errorMsg = currentLanguage === 'zh'
+          ? '没有可朗读的内容'
+          : 'No content to read';
+        updateTTSStatus(errorMsg, true);
+        return;
+      }
+      
+      // 清理文本
+      const cleanText = cleanTextForTTS(currentResponse);
+      
+      if (!cleanText || cleanText.trim().length === 0) {
+        const errorMsg = currentLanguage === 'zh'
+          ? '清理后没有可朗读的文本'
+          : 'No readable text after cleaning';
+        updateTTSStatus(errorMsg, true);
+        return;
+      }
+      
+      if (!('speechSynthesis' in window)) {
+        const errorMsg = currentLanguage === 'zh'
+          ? '您的浏览器不支持语音朗读功能'
+          : 'Your browser does not support text-to-speech';
+        updateTTSStatus(errorMsg, true);
+        return;
+      }
+      
+      // 创建语音实例
+      currentUtterance = new SpeechSynthesisUtterance(cleanText);
+      
+      // 设置语言和语音参数
+      currentUtterance.lang = currentLanguage === 'zh' ? 'zh-CN' : 'en-US';
+      currentUtterance.rate = 0.9;  // 语速
+      currentUtterance.pitch = 1.0; // 音调
+      currentUtterance.volume = 1.0; // 音量
+      
+      // 事件监听器
+      currentUtterance.onstart = () => {
+        isSpeaking = true;
+        updateTTSButton();
+        const statusMsg = currentLanguage === 'zh'
+          ? '正在朗读... 点击喇叭图标停止'
+          : 'Reading aloud... Click speaker to stop';
+        updateTTSStatus(statusMsg, false);
+      };
+      
+      currentUtterance.onend = () => {
+        isSpeaking = false;
+        currentUtterance = null;
+        updateTTSButton();
+        updateTTSStatus('', false);
+      };
+      
+      currentUtterance.onerror = (event) => {
+        console.error('TTS错误:', event);
+        isSpeaking = false;
+        currentUtterance = null;
+        updateTTSButton();
+        const errorMsg = currentLanguage === 'zh'
+          ? `朗读错误: ${event.error}`
+          : `Reading error: ${event.error}`;
+        updateTTSStatus(errorMsg, true);
+      };
+      
+      // 开始朗读
+      speechSynthesis.speak(currentUtterance);
+    }
+    
+    function stopSpeaking() {
+      if (speechSynthesis && isSpeaking) {
+        speechSynthesis.cancel();
+        isSpeaking = false;
+        currentUtterance = null;
+        updateTTSButton();
+        const statusMsg = currentLanguage === 'zh'
+          ? '朗读已停止'
+          : 'Reading stopped';
+        updateTTSStatus(statusMsg, false);
+        setTimeout(() => updateTTSStatus('', false), 2000);
+      }
+    }
+    
+    function updateTTSButton() {
+      const ttsBtn = document.getElementById('ttsBtn');
+      if (isSpeaking) {
+        ttsBtn.classList.add('speaking');
+        ttsBtn.classList.add('active');
+        ttsBtn.textContent = '⏹️';
+        ttsBtn.title = currentLanguage === 'zh' ? '停止朗读' : 'Stop reading';
       } else {
-        alert(currentLanguage === 'zh' 
-          ? '您的浏览器不支持语音朗读' 
-          : 'Your browser does not support text-to-speech');
+        ttsBtn.classList.remove('speaking');
+        ttsBtn.classList.remove('active');
+        ttsBtn.textContent = '🔊';
+        ttsBtn.title = currentLanguage === 'zh' ? '语音朗读' : 'Read aloud';
+      }
+    }
+    
+    function updateTTSStatus(message, isError) {
+      const statusDiv = document.getElementById('ttsStatus');
+      if (message) {
+        statusDiv.textContent = message;
+        statusDiv.className = isError ? 'tts-status error' : 'tts-status active';
+      } else {
+        statusDiv.textContent = '';
+        statusDiv.className = 'tts-status';
       }
     }
 
     function clearChat() {
+      // 停止正在进行的朗读
+      stopSpeaking();
+      
       document.getElementById('aiResponse').textContent = currentLanguage === 'zh'
         ? '对话已清空。有什么可以帮助你的吗？'
         : 'Conversation cleared. How can I help you?';
       currentResponse = '';
-      document.getElementById('ttsBtn').style.display = 'none';
+      updateTTSButton();
+      updateTTSStatus('', false);
+    }
+
+    // ================ 测试连接功能 ================
+    async function testFunctionConnection() {
+      const responseDiv = document.getElementById('aiResponse');
+      const originalContent = responseDiv.innerHTML;
+      const originalClass = responseDiv.className;
+      
+      responseDiv.innerHTML = currentLanguage === 'zh' 
+        ? '🔍 测试连接中...'
+        : '🔍 Testing connection...';
+      responseDiv.className = 'ai-response loading';
+      
+      try {
+        const response = await fetch('/.netlify/functions/deepseek-assistant', {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' }
+        });
+        
+        const text = await response.text();
+        let resultText;
+        
+        try {
+          const data = JSON.parse(text);
+          resultText = currentLanguage === 'zh'
+            ? `<strong>✅ 连接测试成功！</strong><br>
+               状态码: ${response.status}<br>
+               状态: ${data.status || '正常'}<br>
+               时间: ${data.timestamp || '未知'}`
+            : `<strong>✅ Connection Test Successful!</strong><br>
+               Status: ${response.status}<br>
+               Status: ${data.status || 'OK'}<br>
+               Time: ${data.timestamp || 'Unknown'}`;
+        } catch {
+          resultText = currentLanguage === 'zh'
+            ? `<strong>⚠️ 连接测试结果：</strong><br>
+               状态码: ${response.status}<br>
+               响应: ${text.substring(0, 100)}...`
+            : `<strong>⚠️ Connection Test Result：</strong><br>
+               Status: ${response.status}<br>
+               Response: ${text.substring(0, 100)}...`;
+        }
+        
+        responseDiv.innerHTML = resultText;
+        responseDiv.className = 'ai-response';
+        
+        // 5秒后恢复原始内容
+        setTimeout(() => {
+          responseDiv.innerHTML = originalContent;
+          responseDiv.className = originalClass;
+        }, 5000);
+        
+      } catch (error) {
+        responseDiv.innerHTML = currentLanguage === 'zh'
+          ? `<strong>❌ 连接测试失败：</strong><br>${error.message}<br>
+             <small>请检查Netlify Functions部署状态</small>`
+          : `<strong>❌ Connection Test Failed：</strong><br>${error.message}<br>
+             <small>Check Netlify Functions deployment status</small>`;
+        responseDiv.className = 'ai-response error';
+        
+        // 5秒后恢复原始内容
+        setTimeout(() => {
+          responseDiv.innerHTML = originalContent;
+          responseDiv.className = originalClass;
+        }, 5000);
+      }
     }
 
     // ================ 初始化 ================
@@ -1207,6 +1391,13 @@ Model Architecture:
       
       // 初始化语音
       initSpeechRecognition();
+      
+      // 监听页面隐藏时停止语音
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden && isSpeaking) {
+          stopSpeaking();
+        }
+      });
       
       console.log('DeepSeek学习学院加载完成');
     });
