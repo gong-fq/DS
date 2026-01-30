@@ -1,14 +1,14 @@
 {
-  "name": "deepseek-learning-academy",
+  "name": "sdd-academy",
   "version": "1.0.0",
-  "description": "DeepSeek大语言模型学习学院",
+  "description": "SDD规格驱动开发学院",
   "main": "index.html",
   "scripts": {
-    "dev": "netlify dev"
+    "test": "echo \"No tests specified\""
   },
-  "dependencies": {},
-  "devDependencies": {},
-  "keywords": ["deepseek", "llm", "ai", "education"],
+  "keywords": ["sdd", "education", "ai", "teaching"],
   "author": "Your Name",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {}
 }
