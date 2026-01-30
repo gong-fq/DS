@@ -922,7 +922,16 @@ function speakResponse() {
   if (!currentResponse) return;
   
   if ('speechSynthesis' in window) {
-    window.speechSynthesis.cancel();
+    // 如果正在朗读，点击按钮停止
+    if (window.speechSynthesis.speaking) {
+      window.speechSynthesis.cancel();
+      // 更新按钮文本
+      const ttsBtn = document.getElementById('ttsBtn');
+      if (ttsBtn) {
+        ttsBtn.textContent = detectedLanguage === 'zh' ? '🔊 朗读回答' : '🔊 Read Aloud';
+      }
+      return;
+    }
     
     const cleanText = currentResponse
       .replace(/[*_#`~\[\]]/g, '')
@@ -941,6 +950,30 @@ function speakResponse() {
     utterance.lang = detectedLanguage === 'zh' ? 'zh-CN' : 'en-US';
     utterance.rate = 0.9;
     utterance.pitch = 1;
+    
+    // 朗读开始时更新按钮
+    utterance.onstart = function() {
+      const ttsBtn = document.getElementById('ttsBtn');
+      if (ttsBtn) {
+        ttsBtn.textContent = detectedLanguage === 'zh' ? '⏹️ 停止朗读' : '⏹️ Stop Reading';
+      }
+    };
+    
+    // 朗读结束时恢复按钮
+    utterance.onend = function() {
+      const ttsBtn = document.getElementById('ttsBtn');
+      if (ttsBtn) {
+        ttsBtn.textContent = detectedLanguage === 'zh' ? '🔊 朗读回答' : '🔊 Read Aloud';
+      }
+    };
+    
+    // 朗读错误时也恢复按钮
+    utterance.onerror = function() {
+      const ttsBtn = document.getElementById('ttsBtn');
+      if (ttsBtn) {
+        ttsBtn.textContent = detectedLanguage === 'zh' ? '🔊 朗读回答' : '🔊 Read Aloud';
+      }
+    };
     
     window.speechSynthesis.speak(utterance);
   } else {
